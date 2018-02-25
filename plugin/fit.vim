@@ -3,9 +3,11 @@ if exists("g:loaded_fit") || v:version < 800
 endif
 let g:loaded_fit = 1
 
-command -nargs=* -complete=file Files call s:files(<f-args>)
+if !exists('g:FitMatchCommand')
+    call fit#utils#error('g:FitMatchCommand is not defined')
+    finish
+endif
 
-function! s:files(...)
-    let directory = get(a:, 1, ".")
-    call fit#files({"directory": directory})
-endfunction
+call fit#utils#defineDefault('g:FitMaxHeight', 10)
+
+command -nargs=* -complete=file FFiles call fit#files#open(<f-args>)

@@ -1,257 +1,291 @@
-let s:BUFFER_NAME = "fit"
+let s:BUFFER_NAME = "[fit]"
 
-function! fit#error(error)
-    echo a:error
-endfunction
+let s:DEFAULT_OPTIONS = {}
 
-function! fit#init(items, ...)
-    if len(a:items) == 0
-        return fit#error("Nothing to Match")
-    endif
+let s:OPTIONS = {
+    \ 'timeout':       1,
+    \ 'timeoutlen':    0,
+    \ 'hlsearch':      0,
+    \ 'insertmode':    0,
+    \ 'showcmd':       0,
+    \ 'report':        9999,
+    \ 'sidescroll':    0,
+    \ 'sidescrolloff': 0,
+    \ 'equalalways':   0,
+    \ 'shellslash':    1,
+    \ }
 
-    let options = get(a:, 1, {})
-    let openBufferCommand = get(options, "openBufferCommand", "enew")
-    let bufferName = get(options, "bufferName", s:BUFFER_NAME)
+let s:DEFAULT_KEY_BINDINGS = {
+    \ 'selectNext':    ['fit#selectNext', '<C-n>', '<C-j>'],
+    \ 'selectPrev':    ['fit#selectPrev', '<C-p>', '<C-k>'],
+    \ 'acceptSplit':   ['fit#acceptSplit', '<C-s>'],
+    \ 'acceptVsplit':  ['fit#acceptVsplit', '<C-v>'],
+    \ 'acceptTab':     ['fit#acceptTab', '<C-t>'],
+    \ 'accept':        ['fit#accept', '<CR>'],
+    \ 'backspace':     ['fit#backspace', '<BS>'],
+    \ 'backspaceWord': ['fit#backspaceWord', '<C-w>'],
+    \ 'cancel':        ['fit#cancel', '<C-c>'],
+    \ 'clear':         ['fit#clear', '<C-u>'],
+    \ 'cursorLeft':    ['fit#cursorLeft', '<Left>', '<C-h>'],
+    \ 'cursorRight':   ['fit#cursorRight', '<Right>', '<C-l>'],
+    \ 'cursorStart':   ['fit#cursorStart', '<C-a>', '<home>'],
+    \ 'cursorEnd':     ['fit#cursorEnd', '<C-e>', '<end>'],
+    \ 'delete':        ['fit#delete', '<Del>', '<C-d>'],
+    \ }
 
-    " creating a buffer
-    execute openBufferCommand
-
-    execute "silent file " . bufferName
-
-    " remove all mappings
-    mapclear <buffer>
-    mapclear! <buffer>
-
-    " set local options
-    " setlocal laststatus=0
-    setlocal filetype=fit
-    setlocal buftype=nofile
-    setlocal conceallevel=3
-    setlocal concealcursor=nvic
-    setlocal nonumber
-    setlocal norelativenumber
-    setlocal noshowmode
-    setlocal nowrap
-    setlocal nocursorline
-    setlocal nocursorcolumn
-
-    " set buffer variables
-    let b:curtBuf = bufnr("%")
-    let b:items = a:items
-    let b:itemsAmount = len(b:items)
-    let b:picker = get(options, "picker", function("fit#getMatches"))
-    let b:hiddenLines = []
-    let b:header = get(options, "header", [])
-    let b:prompt = get(options, "prompt", "> ")
-    let b:query = ""
-    let b:prevQuery = b:query
-    let b:queryLine = len(b:header) + 1
-    let b:firstMatchLine = b:queryLine + 1
-    let b:hoveredLine = b:firstMatchLine
-    let b:queryStartColumn = len(b:prompt) + 1
-
-    call fit#initMappings()
-    call fit#initEventListeners()
-    call fit#initHighlighting()
-endfunction
-
-function! fit#getMatches(items)
-    let pickCommand = "fzy --show-matches=%s"
-    let command = printf(pickCommand, shellescape(b:query))
-    let availables = []
-
-    for item in a:items
-        call add(availables, item.path)
-    endfor
-
-    let matches = systemlist(command, availables)
-
-    return matches
-endfunction
-
-function! fit#mappingsCall(fn, ...)
-    call call(a:fn, a:000)
-
-    return ""
-endfunction
-
-function! fit#initMappings()
-    inoremap <expr> <buffer> <BS> fit#canGoLeft() ? "\<BS>" : ""
-    inoremap <expr> <buffer> <C-H> fit#canGoLeft() ? "\<C-H>" : ""
-    inoremap <expr> <buffer> <Left> fit#canGoLeft() ? "" : "\<Left>"
-    inoremap <expr> <buffer> <Del> col(".") == col("$") ? "" : "\<Del>"
-    inoremap <silent> <buffer> <Tab> <C-R>=fit#mappingsCall("fit#selectNext")<CR>
-    inoremap <silent> <buffer> <C-J> <C-R>=fit#mappingsCall("fit#selectNext")<CR>
-    inoremap <silent> <buffer> <C-N> <C-R>=fit#mappingsCall("fit#selectNext")<CR>
-    inoremap <silent> <buffer> <S-Tab> <C-R>=fit#mappingsCall("fit#selectPrev")<CR>
-    inoremap <silent> <buffer> <C-K> <C-R>=fit#mappingsCall("fit#selectPrev")<CR>
-    inoremap <silent> <buffer> <C-P> <C-R>=fit#mappingsCall("fit#selectPrev")<CR>
-    inoremap <silent> <buffer> <CR> <C-R>=fit#mappingsCall("fit#accept")<CR>
+function! fit#selectPrev()
+    normal! k
 endfunction
 
 function! fit#selectNext()
-    let nextHoveredLine = b:hoveredLine + 1
+    normal! j
+endfunction
 
-    if nextHoveredLine <= line('$') && nextHoveredLine <= winheight(0)
-        call fit#hoverLine(nextHoveredLine)
+function! fit#delete()
+    if b:pos < len(b:input)
+        let [left, cursor, right] = s:splitInput()
+        let b:input = left . right
+        call s:renderPrompt()
+        call s:onInputChange()
     endif
 endfunction
 
-function! fit#selectPrev()
-    let nextHoveredLine = b:hoveredLine - 1
+function! fit#cursorStart()
+    let b:pos = 0
+    call s:renderPrompt()
+endfunction
 
-    if nextHoveredLine >= b:firstMatchLine
-        call fit#hoverLine(nextHoveredLine)
+function! fit#cursorEnd()
+    let b:pos = len(b:input)
+    call s:renderPrompt()
+endfunction
+
+function! fit#cursorRight()
+    if b:pos < len(b:input)
+        let b:pos += 1
+        call s:renderPrompt()
     endif
 endfunction
 
-function! fit#accept()
-    let buffer = b:curtBuf
-    let selectedIndex = b:hoveredLine - b:firstMatchLine
-    let selectedPath = get(b:matches, selectedIndex, v:null)
-
-    stopinsert
-    execute printf("silent edit %s", fnameescape(selectedPath))
-    call fit#closeBuffer(buffer)
-endfunction
-
-function! fit#hoverLine(line)
-    let b:hoveredLine = a:line
-
-    syntax clear fitHovered
-    execute printf('syntax match fitHovered /\%%%il.*$/', a:line)
-endfunction
-
-function! fit#closeBuffer(buffer)
-    execute "bdelete " . a:buffer
-endfunction
-
-function! fit#canGoLeft()
-    return col('.') > b:queryStartColumn
-endfunction
-
-function! fit#textChangedI()
-    let b:query = strpart(getline(b:queryLine), b:queryStartColumn - 1)
-
-    if b:query !=# b:prevQuery
-        let b:prevQuery = b:query
-        call timer_start(0, "fit#redraw")
+function! fit#cursorLeft()
+    if b:pos > 0
+        let b:pos -= 1
+        call s:renderPrompt()
     endif
 endfunction
 
-function! fit#insertLeave()
-    call fit#closeBuffer(b:curtBuf)
+function! fit#clear()
+    let b:input = ''
+    let b:pos = 0
+    call s:renderPrompt()
+    call s:onInputChange()
 endfunction
 
-function! fit#initEventListeners()
-    autocmd TextChangedI <buffer> call fit#textChangedI()
-    autocmd InsertLeave <buffer> call fit#insertLeave()
+function! fit#backspaceWord()
+    if b:pos == 0 || b:input == ''
+        return
+    endif
+
+    let [left, cursor, right] = s:splitInput()
+    let nextLeft = substitute(left, "\\S*\\s*$", "", "")
+    let b:input = nextLeft . cursor . right
+    let b:pos = len(nextLeft)
+    call s:renderPrompt()
+    call s:onInputChange()
 endfunction
 
-function! fit#initHighlighting()
-    hi link fitHovered Visual
+function! fit#backspace()
+    if b:pos == 0 || b:input == ''
+        return
+    endif
+
+    let [left, cursor, right] = s:splitInput()
+    let b:input = left[0 : -2] . cursor . right
+    let b:pos -= 1
+    call s:renderPrompt()
+    call s:onInputChange()
 endfunction
 
-function! fit#fill()
-    " insert header
-    call fit#updateHeader()
+function! fit#cancel()
+    call s:restoreOptions()
 
-    " insert query line
-    call fit#setQueryLine()
+    " close window
+    let bufNr = bufnr("%")
+    execute "silent! close!"
+    execute "silent! bdelete! " . bufNr
 
-    call timer_start(0, "fit#redraw")
-    call feedkeys("s")
+    redraw
+    echo
 endfunction
 
-function! fit#setQueryLine()
-    call setline(b:queryLine, b:prompt . b:query)
-
-    " move cursor to the end of query line
-    call cursor(b:queryLine, 999)
+function! s:getSelection()
+    let lnum = getcurpos()[1]
+    return get(b:matches, lnum - 1)
 endfunction
 
-function! fit#updateHeader()
-    call setline(1, b:header)
+function! fit#acceptSplit()
+    call fit#accept('split')
+endfunction
+
+function! fit#acceptVsplit()
+    call fit#accept('vsplit')
+endfunction
+
+function! fit#acceptTab()
+    call fit#accept('tabedit')
+endfunction
+
+function! fit#accept(...)
+    if b:matchesAmount == 0
+        return
+    endif
+
+    let command = get(a:, 1, 'edit')
+    let selection = s:getSelection()
+
+    call fit#cancel()
+    call fit#utils#openFile(selection, command)
+endfunction
+
+function! s:getMatchCommand(query)
+    return substitute(g:FitMatchCommand, "<query>", shellescape(a:query), "g")
+endfunction
+
+function! s:getMatches(items, query) abort
+    let matchCommand = s:getMatchCommand(a:query)
+    return systemlist(matchCommand, a:items)
 endfunction
 
 function! fit#redraw(timer)
-    let winView = winsaveview()
-
-    if line('$') > b:queryLine
-        silent execute b:firstMatchLine . ",$d"
-    endif
-
-    call winrestview(winView)
-
-    let b:matches = call(b:picker, [b:items])
+    let b:matches = s:getMatches(b:candidates, b:input)
     let b:matchesAmount = len(b:matches)
+    let height = min([len(b:matches), g:FitMaxHeight])
 
-    call fit#updateHeader()
-
-    let i = b:firstMatchLine
-    let lastVisibleIndex = winheight(0) - b:firstMatchLine
-    let visibleLines = b:matches[:lastVisibleIndex]
-
-    for line in visibleLines
-        call setline(i, line)
-        let i += 1
-    endfor
-
-    if b:matchesAmount > 0
-        call fit#hoverLine(b:firstMatchLine)
-    endif
+    silent! %delete
+    execute printf('resize %d', height)
+    call setline(1, b:matches)
 endfunction
 
-function! fit#files(...)
+function! s:onInputChange()
+    call timer_start(0, "fit#redraw")
+endfunction
+
+function! s:createBuffer(...)
+    execute printf("silent! keepalt botright 1split %s", s:BUFFER_NAME)
+
     let options = get(a:, 1, {})
-    let options.bufferName = get(options, "bufferName", "Files")
-    let options.prompt = get(options, "prompt", "Files>> ")
+    let b:input = ''
+    let b:pos = 0
+    let b:prompt = get(options, 'prompt', '>>')
+    let b:candidates = get(options, 'candidates', [])
 
-    let directory = get(options, "directory", ".")
-    let findCommand = get(options, "findCommand", "rg --color never --files --fixed-strings %s")
-    let options.header = get(options, "header", s:getHeader(directory))
-
-    if !isdirectory(fnamemodify(directory, ":p"))
-        return fit#error(printf("Can't find directory %s", directory))
-    endif
-
-    let command = printf(findCommand, directory)
-
-    " remove ./ at the beginning of the line
-    let command .= ' | sed "s|^\./||"'
-
-    let paths = systemlist(command)
-    if len(paths) == 0
-        return fit#error("No files available")
-    endif
-
-    let items = []
-    for path in paths
-        let item = {}
-        let item.path = path
-        let item.baseName = fnamemodify(path, ":t")
-
-        call add(items, item)
-    endfor
-
-    call fit#init(items, options)
-
-    call fit#fill()
+    call s:setLocalOptions()
 endfunction
 
-function! s:getHeader(directory)
-    let directory = fnamemodify(a:directory, ":~")
-    let title = "Fit Files Finder"
-    let divider = repeat("=", 74)
-    let header = []
+function! s:setLocalOptions()
+    setlocal bufhidden=unload " unload buf when no longer displayed
+    setlocal buftype=nofile   " buffer is not related to any file
+    setlocal noswapfile       " don't create a swapfile
+    setlocal nowrap           " don't soft-wrap
+    setlocal nonumber         " don't show line numbers
+    setlocal norelativenumber " don't show line numbers
+    setlocal nolist           " don't use List mode (visible tabs etc)
+    setlocal foldcolumn=0     " don't show a fold column at side
+    setlocal foldlevel=99     " don't fold anything
+    setlocal cursorline       " highlight line cursor is on
+    setlocal nospell          " spell-checking off
+    setlocal nobuflisted      " don't show up in the buffer list
+    setlocal textwidth=0      " don't hard-wrap (break long lines)
+    setlocal nomore           " don't pause when the command-line overflows
+    setlocal colorcolumn=0    " turn off column highlight
+    setlocal nocursorcolumn   " turn off cursor column
+endfunction
 
-    call add(header, divider)
+function! s:setOptions()
+    for [opt, val] in items(s:OPTIONS)
+        let s:DEFAULT_OPTIONS[opt] = getbufvar("%", "&" . opt)
+        call setbufvar("%", "&" . opt, val)
+    endfor
+endfunction
 
-    call add(header, title)
+function! s:restoreOptions()
+    for [opt, val] in items(s:DEFAULT_OPTIONS)
+        call setbufvar("%", "&" . opt, val)
+    endfor
+endfunction
 
-    call add(header, ' Directory: ' . directory)
+function! fit#handleBasicKey(key)
+    let [left, cursor, right] = s:splitInput()
+    let b:input = left . a:key . cursor . right
+    let b:pos += 1
+    call s:renderPrompt()
+    call s:onInputChange()
+endfunction
 
-    call add(header, divider)
+function! s:mapKey(key, handler, ...)
+    let arglist = join(a:000, ", ")
+    execute printf("noremap <silent> <buffer> <nowait> %s :call %s(%s)<cr>", a:key, a:handler, arglist)
+endfunction
 
-    return header
+function! s:defineMappings()
+    " Basic keys
+    let lowercase = 'abcdefghijklmnopqrstuvwxyz'
+    let uppercase = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
+    let numbers = '0123456789'
+    let punctuation = "<>`@#~!\"$%^&/()=+*-_.,;:?\\\'{}[] " " and space
+    for str in [lowercase, uppercase, numbers, punctuation]
+        for key in split(str, '\zs')
+            call s:mapKey(printf('<Char-%d>', char2nr(key)), 'fit#handleBasicKey', string(key))
+        endfor
+    endfor
+
+    for [action, binding] in items(s:DEFAULT_KEY_BINDINGS)
+        let [handler; keys] = binding
+        for key in keys
+            call s:mapKey(key, handler)
+        endfor
+    endfor
+endfunction
+
+function! s:splitInput()
+    let left = b:pos == 0 ? '' : b:input[: b:pos-1]
+    let cursor = b:input[b:pos]
+    let right = b:input[b:pos+1 :]
+    return [left, cursor, right]
+endfunction
+
+function! s:renderPrompt()
+    let [left, cursor, right] = s:splitInput()
+
+    echohl Comment
+    echon b:prompt
+    echon ' '
+
+    echohl None
+    echon left
+
+    echohl Underlined
+    echon cursor == '' ? ' ' : cursor
+
+    echohl None
+    echon right
+endfunction
+
+function! s:defineHighlighting()
+    highlight link FitNoMatches Error
+    syntax match FitNoMatches '^--NO MATCHES--$'
+endfunction
+
+function! fit#open(...)
+    let handler = get(a:, 1, {})
+    let prompt = get(handler, "prompt", ">>")
+    let candidates = get(handler, "candidates", [])
+
+    call s:createBuffer({ 'prompt': prompt, 'candidates': candidates })
+    call s:setOptions()
+    call s:defineMappings()
+    " TODO: define highlighting
+    call s:defineHighlighting()
+    call s:renderPrompt()
+    call timer_start(0, "fit#redraw")
 endfunction
