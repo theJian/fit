@@ -14,9 +14,12 @@ Hackable finder plugin for vim.
 Intro
 ---
 
+[fit](https://github.com/theJian/fit) is a general-purpose finder plugin. It designed to provide searching/matching via external command-line tools.
+
 Requirements
 ---
 
+- vim 8 or above
+
 Usage
 ---
-
