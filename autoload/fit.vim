@@ -111,8 +111,10 @@ function! fit#cancel()
 
     " close window
     let bufNr = bufnr("%")
+    let restCmd = b:restCmd
     execute "silent! close!"
     execute "silent! bdelete! " . bufNr
+    execute restCmd
 
     redraw
     echo
@@ -171,6 +173,7 @@ function! s:onInputChange()
 endfunction
 
 function! s:createBuffer(...)
+    let restCmd = printf("%iwincmd w|%s", winnr(), winrestcmd())
     execute printf("silent! keepalt botright 1split %s", s:BUFFER_NAME)
 
     let options = get(a:, 1, {})
@@ -178,6 +181,7 @@ function! s:createBuffer(...)
     let b:pos = 0
     let b:prompt = get(options, 'prompt', '>>')
     let b:candidates = get(options, 'candidates', [])
+    let b:restCmd = restCmd
 
     call s:setLocalOptions()
 endfunction
