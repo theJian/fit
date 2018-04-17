@@ -19,7 +19,7 @@ function! fit#files#open(...) abort
     endif
 
     let findCommand = s:getFindCommand(directory)
-    let s:handler.candidates = systemlist(findCommand)
+    let s:handler.candidates = map(systemlist(findCommand), 'fnamemodify(v:val, ":.")')
 
     call fit#open(s:handler)
 endfunction
