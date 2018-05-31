@@ -169,7 +169,10 @@ function! fit#redraw(timer)
 endfunction
 
 function! s:onInputChange()
-    call timer_start(0, "fit#redraw")
+    if b:timerId != -1
+        call timer_stop(b:timerId)
+    endif
+    let b:timerId = timer_start(0, "fit#redraw")
 endfunction
 
 function! s:createBuffer(...)
@@ -182,6 +185,7 @@ function! s:createBuffer(...)
     let b:prompt = get(options, 'prompt', '>>')
     let b:candidates = get(options, 'candidates', [])
     let b:restCmd = restCmd
+    let b:timerId = -1
 
     call s:setLocalOptions()
 endfunction
@@ -288,8 +292,8 @@ function! fit#open(...)
     call s:createBuffer({ 'prompt': prompt, 'candidates': candidates })
     call s:setOptions()
     call s:defineMappings()
-    " TODO: define highlighting
     call s:defineHighlighting()
     call s:renderPrompt()
-    call timer_start(0, "fit#redraw")
+
+    timer_start(0, "fit#redraw")
 endfunction
