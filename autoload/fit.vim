@@ -295,5 +295,5 @@ function! fit#open(...)
     call s:defineHighlighting()
     call s:renderPrompt()
 
-    timer_start(0, "fit#redraw")
+    call timer_start(0, "fit#redraw")
 endfunction
