@@ -207,6 +207,7 @@ function! s:setLocalOptions()
     setlocal nomore           " don't pause when the command-line overflows
     setlocal colorcolumn=0    " turn off column highlight
     setlocal nocursorcolumn   " turn off cursor column
+    setlocal signcolumn=no
 endfunction
 
 function! s:setOptions()
