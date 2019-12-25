@@ -8,7 +8,7 @@
 | )      ___) (___   | |   
 |/       \_______/   )_(   
 
-Hackable finder plugin for vim.
+Hackable finder plugin for nvim.
 </code></pre>
 
 Intro
@@ -19,7 +19,7 @@ Intro
 Requirements
 ---
 
-- vim 8 or above
+- nvim 0.4 or above
 
 Usage
 ---
