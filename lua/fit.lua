@@ -138,7 +138,7 @@ local run_command = (function()
 
 	return function(command, onread)
 		if handle then
-			loop.process_kill(handle, 'sigkill')
+			handle:kill('sigint')
 		end
 
 		if not command then return end
@@ -150,8 +150,11 @@ local run_command = (function()
 			args = { '-c', command },
 			stdio = { nil, stdout, stderr }
 		}, function()
-			loop.read_stop(stdout)
-			loop.read_stop(stderr)
+			stdout:read_stop()
+			stderr:read_stop()
+			stdout:close()
+			stderr:close()
+			handle:close()
 		end)
 
 		loop.read_start(stdout, onread)
