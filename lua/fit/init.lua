@@ -1,3 +1,11 @@
+local util = require('fit.util')
+local debounce = util.debounce
+local memo = util.memo
+local map = util.map
+local filter = util.filter
+local echoerr = util.echoerr
+local truncate_string = util.truncate_string
+
 local options = {
 	finders = {
 		files = 'rg --color never --files <dir> | fzy --show-matches=<query>',
@@ -71,66 +79,6 @@ keybindings.cancel = '<esc>'
 keybindings.select_next = '<c-j>'
 keybindings.select_prev = '<c-k>'
 keybindings.accept = '<cr>'
-
-local function echoerr(msg)
-	vim.api.nvim_err_writeln('[fit]' .. msg)
-end
-
-local function filter(list, test)
-	local result = {}
-	for index, value in ipairs(list) do
-		if test(value, index) then
-			table.insert(result, value)
-		end
-	end
-	return result
-end
-
-local function map(list, fn)
-	local result = {}
-	for index, value in ipairs(list) do
-		result[index] = fn(value, index)
-	end
-	return result
-end
-
-local function memo(fn)
-	local lastArg = {}
-	local lastResult
-	return function(...)
-		local arg = {...}
-		if not vim.deep_equal(lastArg, arg) then
-			lastResult = fn(...)
-			lastArg = arg
-		end
-		return lastResult
-	end
-end
-
-local function clear_timer(timer)
-	if timer and not timer:is_closing() then
-		timer:stop()
-		timer:close()
-	end
-end
-
-local function debounce(fn)
-	local delay = 50 -- ms
-	local timer
-	return function (...)
-		local arg = {...}
-		clear_timer(timer)
-		timer = vim.loop.new_timer()
-		timer:start(
-			delay,
-			0,
-			vim.schedule_wrap(function()
-				clear_timer(timer)
-				fn(unpack(arg))
-			end)
-		)
-	end
-end
 
 local run_command = (function()
 	local loop = vim.loop
@@ -275,6 +223,13 @@ local function create_matcher()
 	}
 end
 
+local function render_buf(buf, width, height, lines)
+	-- local border = string.rep('─', width - 2)
+	-- local top = '┌' .. border .. '┐'
+	-- local bottom = '└' .. border .. '┘'
+	vim.api.nvim_buf_set_lines(buf, 1, -1, 0, lines)
+end
+
 local function open_win(on_change)
 	local lines = options.lines
 	local row, col, width, height = get_win_pos()
@@ -301,8 +256,9 @@ local function open_win(on_change)
 			end
 			return '  ' .. line
 		end)
-		vim.api.nvim_win_set_height(win, #renderlist + 1)
-		vim.api.nvim_buf_set_lines(buf, 1, -1, 0, renderlist)
+		local height = #renderlist + 1
+		vim.api.nvim_win_set_height(win, height)
+		render_buf(buf, width, height, renderlist)
 	end))
 
 	local on_search_update = memo(function(text)
