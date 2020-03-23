@@ -66,6 +66,14 @@ local function truncate_string(string, width)
 	return string
 end
 
+local function termcode(k)
+	return vim.api.nvim_replace_termcodes(k, true, true, true)
+end
+
+local function redraw()
+	vim.api.nvim_command('redraw')
+end
+
 return {
 	debounce = debounce,
 	memo = memo,
@@ -73,4 +81,6 @@ return {
 	filter = filter,
 	echoerr = echoerr,
 	truncate_string = truncate_string,
+	termcode = termcode,
+	redraw = redraw,
 }

@@ -1,3 +1,4 @@
+local actions = require('fit.actions')
 local util = require('fit.util')
 local debounce = util.debounce
 local memo = util.memo
@@ -5,41 +6,60 @@ local map = util.map
 local filter = util.filter
 local echoerr = util.echoerr
 local truncate_string = util.truncate_string
+local redraw = util.redraw
 
 local options = {
 	finders = {
-		files = 'rg --color never --files <dir> | fzy --show-matches=<query>',
+		files = 'rg --color never --files <cwd> | fzy --show-matches=<query>',
 	},
 	width = 'auto',
 	lines = 12,
 }
 
-local current_matcher
+local current_options
 
-local actions = {}
-function actions.cancel()
-	current_matcher = nil
-	vim.api.nvim_win_close(0, true)
-end
-
-function actions.select_next()
-	if current_matcher then
-		current_matcher.cursor_move_next()
+local function quit(win)
+	if vim.api.nvim_win_is_valid(win) then
+		current_options = nil
+		vim.api.nvim_win_close(win, true)
 	end
 end
 
-function actions.select_prev()
-	if current_matcher then
-		current_matcher.cursor_move_prev()
+actions:add(
+	{'<esc>'},
+	function()
+		vim.api.nvim_input('<C-c>')
 	end
-end
+)
 
-function actions.accept()
-	local target = current_matcher.get_target()
-	current_matcher = nil
-	vim.api.nvim_win_close(0, true)
-	vim.api.nvim_command('e ' .. target)
-end
+actions:add(
+	{'<c-j>'},
+	function()
+		if current_options then
+			current_options.cursor_move_next()
+		end
+	end
+)
+
+actions:add(
+	{'<c-k>'},
+	function()
+		if current_options then
+			current_options.cursor_move_prev()
+		end
+	end
+)
+
+actions:add(
+	{'<cr>'},
+	function()
+		local target = current_options.get_target()
+		current_options = nil
+		vim.api.nvim_win_close(0, true)
+		vim.api.nvim_command('e ' .. target)
+		vim.api.nvim_input('<C-c>')
+	end
+)
 
 -- local function actions.accept_split()
 -- end
@@ -73,12 +93,6 @@ end
 
 -- local function actions.delete()
 -- end
-
-local keybindings = {}
-keybindings.cancel = '<esc>'
-keybindings.select_next = '<c-j>'
-keybindings.select_prev = '<c-k>'
-keybindings.accept = '<cr>'
 
 local run_command = (function()
 	local loop = vim.loop
@@ -164,7 +178,7 @@ local function command_call_action(action_type)
 	return string.format(':lua fit.actions.%s()<cr>', action_type)
 end
 
-local function create_matcher()
+local function create_options()
 	local matches = {}
 	local cursor = 0
 	local listeners = {}
@@ -223,14 +237,21 @@ local function create_matcher()
 	}
 end
 
-local function render_buf(buf, width, height, lines)
+local function render_search(buf, search)
+	vim.api.nvim_buf_set_lines(buf, 0, 1, 0, {search})
+	redraw()
+end
+
+local function render_options(buf, width, height, lines)
 	-- local border = string.rep('─', width - 2)
 	-- local top = '┌' .. border .. '┐'
 	-- local bottom = '└' .. border .. '┘'
 	vim.api.nvim_buf_set_lines(buf, 1, -1, 0, lines)
+	redraw()
 end
 
 local function open_win(on_change)
+	local search = ''
 	local lines = options.lines
 	local row, col, width, height = get_win_pos()
 	local buf = vim.api.nvim_create_buf(false, true)
@@ -243,8 +264,8 @@ local function open_win(on_change)
 		height = height,
 	})
 
-	current_matcher = create_matcher()
-	current_matcher.subscribe(vim.schedule_wrap(function(matches, cursor)
+	current_options = create_options()
+	current_options.subscribe(vim.schedule_wrap(function(matches, cursor)
 		local top = math.max(cursor - math.floor(lines / 2), 1)
 		local bottom = top + lines
 		local renderlist = {}
@@ -258,50 +279,44 @@ local function open_win(on_change)
 		end)
 		local height = #renderlist + 1
 		vim.api.nvim_win_set_height(win, height)
-		render_buf(buf, width, height, renderlist)
+		render_options(buf, width, height, renderlist)
 	end))
 
 	local on_search_update = memo(function(text)
-		current_matcher.init_matcher({})
-		on_change(text, function(result)
-			local new_matches = vim.split(vim.trim(result), '\n')
-			current_matcher.append_matches(new_matches)
+		render_search(buf, text)
+		current_options.init_matcher({})
+		on_change(text, function(new_matches)
+			current_options.append_matches(new_matches)
 		end)
 	end)
 
-	vim.api.nvim_buf_attach(buf, false, {
-		on_lines = function(_buf, _changedtick, firstline, lastline, new_lastline)
-			local text = vim.api.nvim_get_current_line()
-			text = vim.trim(text)
+	-- listen keyboard
+	vim.api.nvim_command('mapclear <buffer>')
 
-			on_search_update(text)
+	actions:fallback(function(key)
+		search = search .. key
+		on_search_update(search)
+	end)
+
+	local function listen_key()
+		local status, key = pcall(function() return vim.fn.getchar() end)
+		if not status then
+			quit(win)
+			return
 		end
-	})
-
-	-- remap keyboard
-	for i=32, 126 do
-		local char = string.char(i)
-		vim.api.nvim_buf_set_keymap(buf, 'n', char, command_put_char(char), {
-			noremap = true,
-			nowait = true,
-			silent = true,
-		})
-	end
-
-	for k,v in pairs(keybindings) do
-		if actions[k] then
-			vim.api.nvim_buf_set_keymap(buf, 'n', v, command_call_action(k), {
-				noremap = true,
-				nowait = true,
-				silent = true,
-			})
+		if type(key) == 'number' then
+			key = vim.fn.nr2char(key)
 		end
+
+		actions:dispatch(key)
+
+		return vim.schedule(listen_key)
 	end
+	vim.schedule(listen_key)
 end
 
 -- Methods
 fit = {}
-fit.actions = actions
 
 function fit.finder(name)
 	local finder = options.finders[name]
@@ -334,7 +349,7 @@ function fit.finder(name)
 			end
 
 			if data then
-				cb(data)
+				cb(vim.split(vim.trim(data), '\n'))
 			end
 		end)
 	end)
