@@ -1,11 +1,11 @@
 local actions = require('fit.actions')
+local win = require('fit.win')
 local util = require('fit.util')
 local debounce = util.debounce
 local memo = util.memo
 local map = util.map
 local filter = util.filter
 local echoerr = util.echoerr
-local truncate_string = util.truncate_string
 local redraw = util.redraw
 
 local options = {
@@ -19,10 +19,8 @@ local options = {
 local current_options
 
 local function quit(win)
-	if vim.api.nvim_win_is_valid(win) then
-		current_options = nil
-		vim.api.nvim_win_close(win, true)
-	end
+	current_options = nil
+	win:close()
 end
 
 actions:add(
@@ -132,52 +130,6 @@ local function make_command(command_string, placeholders)
 	return command
 end
 
-local function get_auto_width(editor_width)
-	local min_width = math.min(editor_width, 60)
-	local w = math.floor(editor_width / 2)
-	return math.max(min_width, w)
-end
-
-local function get_win_width(width, editor_width)
-	if width == 'auto' then
-		return get_auto_width(editor_width)
-	end
-
-	if type(width) == 'number' and width > 0 then
-		return math.min(width, editor_width)
-	end
-
-	echoerr('options.width must be "auto" or a positive number')
-	return get_win_width('auto')
-end
-
-local function get_auto_top(editor_height)
-	local max_top = 5
-	if editor_height < 15 then
-		return 0
-	end
-	return max_top
-end
-
-local function get_win_pos()
-	local col, width
-	local ew = vim.api.nvim_get_option('columns')
-	local eh = vim.api.nvim_get_option('lines')
-	local width = get_win_width(options.width, ew)
-	local col = math.floor((ew - width) / 2)
-	local row = get_auto_top(eh)
-	local height = 1
-	return row, col, width, height
-end
-
-local function command_put_char(char)
-	return string.format(':call nvim_put(["%s"], "c", 0, 1)<cr>', char)
-end
-
-local function command_call_action(action_type)
-	return string.format(':lua fit.actions.%s()<cr>', action_type)
-end
-
 local function create_options()
 	local matches = {}
 	local cursor = 0
@@ -237,11 +189,6 @@ local function create_options()
 	}
 end
 
-local function render_search(buf, search)
-	vim.api.nvim_buf_set_lines(buf, 0, 1, 0, {search})
-	redraw()
-end
-
 local function render_options(buf, width, height, lines)
 	-- local border = string.rep('─', width - 2)
 	-- local top = '┌' .. border .. '┐'
@@ -252,39 +199,17 @@ end
 
 local function open_win(on_change)
 	local search = ''
-	local lines = options.lines
-	local row, col, width, height = get_win_pos()
-	local buf = vim.api.nvim_create_buf(false, true)
-	local win = vim.api.nvim_open_win(buf, true, {
-		relative = 'editor',
-		style = 'minimal',
-		row = row,
-		col = col,
-		width = width,
-		height = height,
-	})
+	win:open(options)
 
 	current_options = create_options()
 	current_options.subscribe(vim.schedule_wrap(function(matches, cursor)
-		local top = math.max(cursor - math.floor(lines / 2), 1)
-		local bottom = top + lines
-		local renderlist = {}
-		vim.list_extend(renderlist, matches, top, bottom)
-		renderlist = map(renderlist, function(line, index)
-			local orig_index = top + index - 1
-			if orig_index == cursor then
-				return '> ' .. line
-			end
-			return '  ' .. line
-		end)
-		local height = #renderlist + 1
-		vim.api.nvim_win_set_height(win, height)
-		render_options(buf, width, height, renderlist)
+		win:set_select_options(matches)
+		win:set_cursor(cursor)
 	end))
 
 	local on_search_update = memo(function(text)
-		render_search(buf, text)
 		current_options.init_matcher({})
+		win:set_search(text)
 		on_change(text, function(new_matches)
 			current_options.append_matches(new_matches)
 		end)

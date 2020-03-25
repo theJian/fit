@@ -58,9 +58,21 @@ local function echoerr(msg)
 	vim.api.nvim_err_writeln('[fit]' .. msg)
 end
 
-local function truncate_string(string, width)
+local function truncate_string(string, width, omitLeft)
 	if #string > width then
-		return string.sub(string, 1, width - 2) .. '..'
+		local left, right, prefix, subfix
+		if omitLeft then
+			left = 2 - width
+			right = -1
+			prefix = '‥'
+			subfix = ''
+		else
+			left = 1
+			right = width - 2
+			prefix = ''
+			subfix = '‥'
+		end
+		return prefix .. string.sub(string, left, right) .. subfix
 	end
 
 	return string
