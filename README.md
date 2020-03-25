@@ -19,7 +19,7 @@ Intro
 Requirements
 ---
 
-- nvim 0.4 or above
+- nvim 0.5 or above
 
 Usage
 ---
