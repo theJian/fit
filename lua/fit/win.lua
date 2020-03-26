@@ -113,9 +113,9 @@ function win:render()
 end
 
 function win:close()
-	if self.win then
-		vim.api.nvim_win_close(self.win, true)
-		self.win = nil
+	if self.container then
+		vim.api.nvim_win_close(self.container, true)
+		self.container = nil
 	end
 end
 
