@@ -52,9 +52,9 @@ actions:add(
 	{'<cr>'},
 	function()
 		local target = current_options.get_target()
-		current_options = nil
-		vim.api.nvim_win_close(0, true)
-		vim.api.nvim_command('e ' .. target)
+		win:once_close(function()
+			vim.api.nvim_command('e ' .. target)
+		end)
 		vim.api.nvim_input('<C-c>')
 	end
 )

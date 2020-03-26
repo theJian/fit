@@ -116,7 +116,16 @@ function win:close()
 	if self.container then
 		vim.api.nvim_win_close(self.container, true)
 		self.container = nil
+
+		if self.once_close_f then
+			self.once_close_f()
+			self.once_close_f = nil
+		end
 	end
+end
+
+function win:once_close(f)
+	self.once_close_f = f
 end
 
 return win
