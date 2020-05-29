@@ -6,7 +6,7 @@ local function clear_timer(timer)
 end
 
 local function debounce(fn)
-	local delay = 50 -- ms
+	local delay = 250 -- ms
 	local timer
 	return function (...)
 		local arg = {...}
