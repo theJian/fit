@@ -58,15 +58,6 @@ actions:add(
 	end
 )
 
--- local function actions.accept_split()
--- end
-
--- local function actions.accept_vsplit()
--- end
-
--- local function actions.accept_tab()
--- end
-
 -- local function actions.backspace()
 -- end
 
@@ -240,7 +231,9 @@ local function open_win(on_change, on_accept)
 end
 
 -- Methods
-M = {}
+M = {
+	actions = actions
+}
 
 function M.find(find_command, accept_command)
 	if not find_command then
