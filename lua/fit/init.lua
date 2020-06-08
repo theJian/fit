@@ -7,6 +7,8 @@ local map = util.map
 local filter = util.filter
 local echoerr = util.echoerr
 local redraw = util.redraw
+local run_command = util.run_command
+local termcode = util.termcode
 
 local options = {
 	width = 'auto',
@@ -16,7 +18,8 @@ local options = {
 local current_options
 local current_accept_command
 
-local function quit(win)
+local function quit()
+	run_command(nil)
 	current_options = nil
 	win:close()
 end
@@ -24,7 +27,7 @@ end
 actions:add(
 	{'<esc>'},
 	function()
-		vim.api.nvim_input('<C-c>')
+		return false -- indicate ending getchar loop
 	end
 )
 
@@ -34,6 +37,7 @@ actions:add(
 		if current_options then
 			current_options.cursor_move_next()
 		end
+		return true
 	end
 )
 
@@ -43,6 +47,7 @@ actions:add(
 		if current_options then
 			current_options.cursor_move_prev()
 		end
+		return true
 	end
 )
 
@@ -54,7 +59,7 @@ actions:add(
 			local command = current_accept_command or 'e'
 			vim.api.nvim_command(string.format('%s %s', command, target))
 		end)
-		vim.api.nvim_input('<C-c>')
+		return false
 	end
 )
 
@@ -81,36 +86,6 @@ actions:add(
 
 -- local function actions.delete()
 -- end
-
-local run_command = (function()
-	local loop = vim.loop
-	local handle
-
-	return function(command, onread)
-		if handle then
-			handle:kill('sigint')
-		end
-
-		if not command then return end
-
-		local stdout = loop.new_pipe(false)
-		local stderr = loop.new_pipe(false)
-
-		handle = loop.spawn('bash', {
-			args = { '-c', command },
-			stdio = { nil, stdout, stderr }
-		}, function()
-			stdout:read_stop()
-			stderr:read_stop()
-			stdout:close()
-			stderr:close()
-			handle:close()
-		end)
-
-		loop.read_start(stdout, onread)
-		loop.read_start(stderr, onread)
-	end
-end)()
 
 local function make_command(command_string, placeholders)
 	local command = command_string
@@ -187,7 +162,7 @@ local function render_options(buf, width, height, lines)
 	redraw()
 end
 
-local function open_win(on_change, on_accept)
+local function open_win(on_change)
 	local search = ''
 	win:open(options)
 
@@ -201,7 +176,9 @@ local function open_win(on_change, on_accept)
 		current_options.init_matcher({})
 		win:set_search(text)
 		on_change(text, function(new_matches)
-			current_options.append_matches(new_matches)
+			if current_options then
+				current_options.append_matches(new_matches)
+			end
 		end)
 	end)
 
@@ -211,19 +188,24 @@ local function open_win(on_change, on_accept)
 	actions:fallback(function(key)
 		search = search .. key
 		on_search_update(search)
+		return true
 	end)
 
 	local function listen_key()
 		local status, key = pcall(function() return vim.fn.getchar() end)
 		if not status then
-			quit(win)
+			quit()
 			return
 		end
 		if type(key) == 'number' then
 			key = vim.fn.nr2char(key)
 		end
 
-		actions:dispatch(key)
+		local shouldContinue = actions:dispatch(key)
+		if not shouldContinue then
+			quit()
+			return
+		end
 
 		return vim.schedule(listen_key)
 	end

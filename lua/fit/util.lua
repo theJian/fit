@@ -86,13 +86,40 @@ local function redraw()
 	vim.api.nvim_command('redraw')
 end
 
+local function create_command_runner()
+	local loop = vim.loop
+	local handle
+
+	return function(command, onread)
+		if handle then
+			handle:kill('sigkill')
+		end
+
+		if not command then return end
+
+		local stdout = loop.new_pipe(false)
+
+		handle = loop.spawn('bash', {
+			args = { '-c', command },
+			stdio = { nil, stdout, nil }
+		}, function()
+			stdout:read_stop()
+			stdout:close()
+			handle:close()
+		end)
+
+		loop.read_start(stdout, onread)
+	end
+end
+
 return {
-	debounce = debounce,
-	memo = memo,
-	map = map,
-	filter = filter,
-	echoerr = echoerr,
-	truncate_string = truncate_string,
-	termcode = termcode,
-	redraw = redraw,
+	debounce = debounce;
+	memo = memo;
+	map = map;
+	filter = filter;
+	echoerr = echoerr;
+	truncate_string = truncate_string;
+	termcode = termcode;
+	redraw = redraw;
+	run_command = create_command_runner();
 }

@@ -6,7 +6,7 @@ local actions = {}
 
 function actions:handler(key)
 	if self.fallback_fn then
-		self.fallback_fn(key)
+		return self.fallback_fn(key)
 	end
 end
 
@@ -15,15 +15,15 @@ function actions:add(keys, handler)
 	local coded_keys = map(keys, termcode)
 	self.handler = function(self, key)
 		if vim.tbl_contains(coded_keys, key) then
-			handler(key)
+			return handler(key)
 		else
-			next_handler(self, key)
+			return next_handler(self, key)
 		end
 	end
 end
 
 function actions:dispatch(key)
-	self:handler(key)
+	return self:handler(key)
 end
 
 function actions:fallback(f)
