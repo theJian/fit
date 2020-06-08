@@ -9,14 +9,12 @@ local echoerr = util.echoerr
 local redraw = util.redraw
 
 local options = {
-	finders = {
-		files = 'rg --color never --files <cwd> | fzy --show-matches=<query>',
-	},
 	width = 'auto',
 	lines = 12,
 }
 
 local current_options
+local current_accept_command
 
 local function quit(win)
 	current_options = nil
@@ -53,7 +51,8 @@ actions:add(
 	function()
 		local target = current_options.get_target()
 		win:once_close(function()
-			vim.api.nvim_command('e ' .. target)
+			local command = current_accept_command or 'e'
+			vim.api.nvim_command(string.format('%s %s', command, target))
 		end)
 		vim.api.nvim_input('<C-c>')
 	end
@@ -197,7 +196,7 @@ local function render_options(buf, width, height, lines)
 	redraw()
 end
 
-local function open_win(on_change)
+local function open_win(on_change, on_accept)
 	local search = ''
 	win:open(options)
 
@@ -241,29 +240,27 @@ local function open_win(on_change)
 end
 
 -- Methods
-fit = {}
+M = {}
 
-function fit.finder(name)
-	local finder = options.finders[name]
-
-	if not finder then
-		echoerr('Finder is not defined')
+function M.find(find_command, accept_command)
+	if not find_command then
+		echoerr('find_command is not defined')
 		return
 	end
 
-	if type(finder) ~= 'string' then
-		echoerr('Expected finder to be a string')
+	if type(find_command) ~= 'string' then
+		echoerr('Expected find_command to be a string')
 		return
 	end
 
-	local mid_command = make_command(finder, {
+	local confined_find_command = make_command(find_command, {
 		['<cwd>']  = vim.fn.getcwd(),
 		['<file>'] = vim.fn.expand('%:p'),
 		['<dir>']  = vim.fn.expand('%:p:h'),
 	})
 
-	local on_change = debounce(function(text, cb)
-		local command = make_command(mid_command, {
+	local on_change = debounce(function(text, done)
+		local command = make_command(confined_find_command, {
 			['<query>'] = text
 		})
 
@@ -274,12 +271,17 @@ function fit.finder(name)
 			end
 
 			if data then
-				cb(vim.split(vim.trim(data), '\n'))
+				done(vim.split(vim.trim(data), '\n'))
 			end
 		end)
 	end)
 
+	current_accept_command = accept_command
 	open_win(on_change)
 end
 
-return fit
+function M.setup(user_options)
+	options = vim.tbl_extend('force', options, user_options or {})
+end
+
+return M
