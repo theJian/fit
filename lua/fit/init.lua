@@ -7,7 +7,7 @@ local map = util.map
 local filter = util.filter
 local echoerr = util.echoerr
 local redraw = util.redraw
-local run_command = util.run_command
+local run_script = util.run_script
 local termcode = util.termcode
 
 local options = {
@@ -19,7 +19,7 @@ local current_options
 local current_accept_command
 
 local function quit()
-	run_command(nil)
+	run_script(nil)
 	current_options = nil
 	win:close()
 end
@@ -212,47 +212,78 @@ local function open_win(on_change)
 	vim.schedule(listen_key)
 end
 
--- Methods
-M = {
-	actions = actions
-}
+local function start(options)
+	local script = options.script
+	local accept_command = options.accept_command
+	local on_write = options.on_write
 
-function M.find(find_command, accept_command)
-	if not find_command then
-		echoerr('find_command is not defined')
-		return
-	end
-
-	if type(find_command) ~= 'string' then
-		echoerr('Expected find_command to be a string')
-		return
-	end
-
-	local confined_find_command = make_command(find_command, {
+	local confined_script = make_command(script, {
 		['<cwd>']  = vim.fn.getcwd(),
 		['<file>'] = vim.fn.expand('%:p'),
 		['<dir>']  = vim.fn.expand('%:p:h'),
 	})
 
-	local on_change = debounce(function(text, done)
-		local command = make_command(confined_find_command, {
+	local on_search_change = debounce(function(text, done)
+		local query_script = make_command(confined_script, {
 			['<query>'] = text
 		})
 
-		run_command(command, function(err, data)
-			if err then
-				-- TODO: process error
-				return
-			end
+		run_script(query_script, {
+			on_read = function(err, data)
+				if err then
+					-- TODO: process error
+					return
+				end
 
-			if data then
-				done(vim.split(vim.trim(data), '\n'))
-			end
-		end)
+				if data then
+					done(vim.split(vim.trim(data), '\n'))
+				end
+			end;
+
+			on_write = on_write;
+		})
 	end)
 
 	current_accept_command = accept_command
-	open_win(on_change)
+	open_win(on_search_change)
+end
+
+-- Methods
+M = {
+	actions = actions
+}
+
+function M.find(script, accept_command)
+	vim.validate{
+		script={script, 'string'};
+		accept_command={accept_command, 'string', true};
+	}
+
+	start({
+		script = script;
+		accept_command = accept_command or 'e';
+	})
+end
+
+function M.buffers(script, accept_command)
+	vim.validate{
+		script={script, 'string'};
+		accept_command={accept_command, 'string', true};
+	}
+
+	local loaded_buf_handlers = filter(vim.api.nvim_list_bufs(), function(handler)
+		return vim.api.nvim_buf_is_loaded(handler)
+	end)
+	local buf_names = map(loaded_buf_handlers, function(handler)
+		return vim.api.nvim_buf_get_name(handler)
+	end)
+	local write_data = table.concat(buf_names, '\n')
+
+	start({
+		script = script;
+		accept_command = accept_command or 'b';
+		on_write = function() return write_data end;
+	})
 end
 
 function M.setup(user_options)
