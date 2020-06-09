@@ -58,6 +58,7 @@ function win:open(options)
 	self.lines = options.lines
 	self.search = ''
 	self.buf = vim.api.nvim_create_buf(false, true)
+	vim.api.nvim_buf_set_option(self.buf, 'bufhidden', 'wipe')
 	self.container = create_win_container(self.buf, { width = options.width })
 	self.width = vim.api.nvim_win_get_width(self.container)
 end
