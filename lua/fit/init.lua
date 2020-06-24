@@ -201,8 +201,8 @@ local function open_win(on_change)
 			key = vim.fn.nr2char(key)
 		end
 
-		local shouldContinue = actions:dispatch(key)
-		if not shouldContinue then
+		local should_continue = actions:dispatch(key)
+		if not should_continue then
 			quit()
 			return
 		end
