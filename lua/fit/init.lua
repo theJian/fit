@@ -10,7 +10,7 @@ local redraw = util.redraw
 local run_script = util.run_script
 local termcode = util.termcode
 
-local options = {
+local settings = {
 	width = 'auto',
 	lines = 12,
 }
@@ -35,7 +35,7 @@ actions:add(
 	{'<c-j>'},
 	function()
 		if current_options then
-			current_options.cursor_move_next()
+			current_options.focus_move_next()
 		end
 		return true
 	end
@@ -45,7 +45,7 @@ actions:add(
 	{'<c-k>'},
 	function()
 		if current_options then
-			current_options.cursor_move_prev()
+			current_options.focus_move_prev()
 		end
 		return true
 	end
@@ -130,12 +130,12 @@ local function create_options()
 		notify()
 	end
 
-	local function cursor_move_next()
+	local function focus_move_next()
 		cursor = math.min(cursor + 1, #matches)
 		notify()
 	end
 
-	local function cursor_move_prev()
+	local function focus_move_prev()
 		cursor = math.max(cursor - 1, math.min(#matches, 1))
 		notify()
 	end
@@ -148,8 +148,8 @@ local function create_options()
 		subscribe = subscribe,
 		init_matcher = init_matcher,
 		append_matches = append_matches,
-		cursor_move_next = cursor_move_next,
-		cursor_move_prev = cursor_move_prev,
+		focus_move_next = focus_move_next,
+		focus_move_prev = focus_move_prev,
 		get_target = get_target,
 	}
 end
@@ -164,7 +164,7 @@ end
 
 local function open_win(on_change)
 	local search = ''
-	win:open(options)
+	win:open(settings)
 
 	current_options = create_options()
 	current_options.subscribe(vim.schedule_wrap(function(matches, cursor)
@@ -286,8 +286,8 @@ function M.buffers(script, accept_command)
 	})
 end
 
-function M.setup(user_options)
-	options = vim.tbl_extend('force', options, user_options or {})
+function M.setup(user_settings)
+	settings = vim.tbl_extend('force', settings, user_settings or {})
 end
 
 return M
