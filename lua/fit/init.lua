@@ -1,91 +1,121 @@
-local actions = require('fit.actions')
-local win = require('fit.win')
-local util = require('fit.util')
+local worker = require 'fit.worker'
+local kb = require 'fit.kb'
+local win = require 'fit.win'
+local input = require 'fit.input'
+local options = require 'fit.options'
+local event = require 'fit.event'
+local util = require 'fit.util'
 local debounce = util.debounce
 local memo = util.memo
 local map = util.map
 local filter = util.filter
 local echoerr = util.echoerr
 local redraw = util.redraw
-local run_script = util.run_script
 local termcode = util.termcode
 
 local settings = {
 	width = 'auto',
-	lines = 12,
+	lines = 13,
 }
 
-local current_options
-local current_accept_command
+local actions = event:new()
 
 local function quit()
-	run_script(nil)
-	current_options = nil
+	worker:stop()
 	win:close()
+	actions:emit('quit')
 end
 
-actions:add(
+kb:add(
 	{'<esc>'},
 	function()
-		return false -- indicate ending getchar loop
-	end
-)
-
-actions:add(
-	{'<c-j>'},
-	function()
-		if current_options then
-			current_options.focus_move_next()
-		end
-		return true
-	end
-)
-
-actions:add(
-	{'<c-k>'},
-	function()
-		if current_options then
-			current_options.focus_move_prev()
-		end
-		return true
-	end
-)
-
-actions:add(
-	{'<cr>'},
-	function()
-		local target = current_options.get_target()
-		win:once_close(function()
-			local command = current_accept_command or 'e'
-			vim.api.nvim_command(string.format('%s %s', command, target))
-		end)
 		return false
 	end
 )
 
--- local function actions.backspace()
--- end
+kb:add(
+	{'<c-j>'},
+	function()
+		options:focus_next()
+	end
+)
 
--- local function actions.backspace_word()
--- end
+kb:add(
+	{'<c-k>'},
+	function()
+		options:focus_prev()
+	end
+)
 
--- local function actions.clear()
--- end
+kb:add(
+	{'<cr>'},
+	function()
+		actions:emit('accept', options:get_focused_option())
+		return false
+	end
+)
 
--- local function actions.cursor_left()
--- end
+kb:add(
+	{'<left>'},
+	function()
+		input:cursor_move_left()
+	end
+)
 
--- local function actions.cursor_right()
--- end
+kb:add(
+	{'<right>'},
+	function()
+		input:cursor_move_right()
+	end
+)
 
--- local function actions.cursor_start()
--- end
+kb:add(
+	{'<bs>', '<c-h>'},
+	function()
+		input:backspace()
+	end
+)
 
--- local function actions.cursor_end()
--- end
+kb:add(
+	{'<c-u>'},
+	function()
+		input:clear()
+	end
+)
 
--- local function actions.delete()
--- end
+kb:add(
+	{'<c-w>'},
+	function()
+		input:backspace_word()
+	end
+)
+
+kb:fallback(function(key)
+	input:insert(key)
+end)
+
+input:on_change(function()
+	win:update({
+		input = input.search;
+		cursor = input.cursor;
+	})
+end)
+
+input:on_change(function()
+	actions:emit('input', input.search)
+end)
+
+options:on_change(function()
+	local slice_start = math.max(
+		math.min(options.focus - math.floor(settings.lines / 2), #options.matches - settings.lines + 1),
+		1
+	)
+	local slice_end = slice_start + settings.lines
+	win:update({
+		focus = options.focus - slice_start + 1;
+		options = {unpack(options.matches, slice_start, slice_end - 1)};
+	})
+end)
 
 local function make_command(command_string, placeholders)
 	local command = command_string
@@ -93,65 +123,6 @@ local function make_command(command_string, placeholders)
 		command = string.gsub(command, k, v)
 	end
 	return command
-end
-
-local function create_options()
-	local matches = {}
-	local cursor = 0
-	local listeners = {}
-
-	local function subscribe(callback)
-		table.insert(listeners, callback)
-		local function unsubscribe()
-			listeners = filter(listeners, function(listener)
-				return listener ~= callback
-			end)
-		end
-		return unsubscribe
-	end
-
-	local function notify()
-		for _, listener in ipairs(listeners) do
-			listener(matches, cursor)
-		end
-	end
-
-	local function init_matcher(next_matches)
-		matches = next_matches
-		cursor = math.max(0, math.min(#matches, 1))
-		notify()
-	end
-
-	local function append_matches(new_matches)
-		vim.list_extend(matches, new_matches)
-		if cursor == 0 and #matches > 0 then
-			cursor = 1
-		end
-		notify()
-	end
-
-	local function focus_move_next()
-		cursor = math.min(cursor + 1, #matches)
-		notify()
-	end
-
-	local function focus_move_prev()
-		cursor = math.max(cursor - 1, math.min(#matches, 1))
-		notify()
-	end
-
-	local function get_target()
-		return matches[cursor]
-	end
-
-	return {
-		subscribe = subscribe,
-		init_matcher = init_matcher,
-		append_matches = append_matches,
-		focus_move_next = focus_move_next,
-		focus_move_prev = focus_move_prev,
-		get_target = get_target,
-	}
 end
 
 local function render_options(buf, width, height, lines)
@@ -162,34 +133,10 @@ local function render_options(buf, width, height, lines)
 	redraw()
 end
 
-local function open_win(on_change)
-	local search = ''
+local function show_win(on_change, on_accept)
+	input:clear()
+	options:clear()
 	win:open(settings)
-
-	current_options = create_options()
-	current_options.subscribe(vim.schedule_wrap(function(matches, cursor)
-		win:set_select_options(matches)
-		win:set_cursor(cursor)
-	end))
-
-	local on_search_update = memo(function(text)
-		current_options.init_matcher({})
-		win:set_search(text)
-		on_change(text, function(new_matches)
-			if current_options then
-				current_options.append_matches(new_matches)
-			end
-		end)
-	end)
-
-	-- listen keyboard
-	vim.api.nvim_command('mapclear <buffer>')
-
-	actions:fallback(function(key)
-		search = search .. key
-		on_search_update(search)
-		return true
-	end)
 
 	local function listen_key()
 		local status, key = pcall(function() return vim.fn.getchar() end)
@@ -201,7 +148,7 @@ local function open_win(on_change)
 			key = vim.fn.nr2char(key)
 		end
 
-		local should_continue = actions:dispatch(key)
+		local should_continue = kb:dispatch(key) ~= false
 		if not should_continue then
 			quit()
 			return
@@ -212,45 +159,57 @@ local function open_win(on_change)
 	vim.schedule(listen_key)
 end
 
-local function start(options)
-	local script = options.script
-	local accept_command = options.accept_command
-	local on_write = options.on_write
+local function open_finder(config)
+	local script = config.script
+	local accept_command = config.accept_command
+	local on_write = config.on_write
 
-	local confined_script = make_command(script, {
+	script = make_command(script, {
 		['<cwd>']  = vim.fn.getcwd(),
 		['<file>'] = vim.fn.expand('%:p'),
 		['<dir>']  = vim.fn.expand('%:p:h'),
 	})
 
-	local on_search_change = debounce(function(text, done)
-		local query_script = make_command(confined_script, {
-			['<query>'] = text
-		})
+	show_win()
 
-		run_script(query_script, {
-			on_read = function(err, data)
-				if err then
-					-- TODO: process error
-					return
-				end
+	local selected
+	actions:on('input', memo(debounce(function(text)
+		options:clear()
+		worker:run(
+			make_command(script, {
+				['<query>'] = text
+			}),
+			{
+				on_read = function(err, data)
+					if err then
+						-- TODO: process error
+						return
+					end
 
-				if data then
-					done(vim.split(vim.trim(data), '\n'))
-				end
-			end;
+					if data then
+						options:push_matches(vim.split(vim.trim(data), '\n'))
+					end
+				end;
 
-			on_write = on_write;
-		})
+				on_write = on_write;
+			}
+		)
+	end)))
+	actions:on('accept', function(result) selected = result end)
+	actions:on('quit', function()
+		if selected then
+			vim.api.nvim_command(string.format('%s %s', accept_command, selected))
+		end
+
+		actions:off_all('input')
+		actions:off_all('accept')
+		actions:off_all('quit')
 	end)
-
-	current_accept_command = accept_command
-	open_win(on_search_change)
 end
 
 -- Methods
 M = {
-	actions = actions
+	kb = kb
 }
 
 function M.find(script, accept_command)
@@ -259,7 +218,7 @@ function M.find(script, accept_command)
 		accept_command={accept_command, 'string', true};
 	}
 
-	start({
+	open_finder({
 		script = script;
 		accept_command = accept_command or 'e';
 	})
@@ -279,7 +238,7 @@ function M.buffers(script, accept_command)
 	end)
 	local write_data = table.concat(buf_names, '\n')
 
-	start({
+	open_finder({
 		script = script;
 		accept_command = accept_command or 'b';
 		on_write = function() return write_data end;

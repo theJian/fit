@@ -58,10 +58,10 @@ local function echoerr(msg)
 	vim.api.nvim_err_writeln('[fit]' .. msg)
 end
 
-local function truncate_string(string, width, omitLeft)
+local function truncate_string(string, width, hide_left)
 	if #string > width then
 		local left, right, prefix, subfix
-		if omitLeft then
+		if hide_left then
 			left = 2 - width
 			right = -1
 			prefix = '‥'
@@ -86,37 +86,8 @@ local function redraw()
 	vim.api.nvim_command('redraw')
 end
 
-local function create_script_runner()
-	local loop = vim.loop
-	local handle
-
-	return function(command, options)
-		if handle then
-			handle:kill('sigkill')
-		end
-
-		if not command then return end
-
-		local on_read = options.on_read
-		local on_write = options.on_write
-		local stdin = loop.new_pipe(false)
-		local stdout = loop.new_pipe(false)
-
-		handle = loop.spawn('bash', {
-			args = { '-c', command },
-			stdio = { stdin, stdout, nil }
-		}, function()
-			stdin:close()
-			stdout:read_stop()
-			stdout:close()
-			handle:close()
-		end)
-		loop.read_start(stdout, on_read)
-		if on_write then
-			loop.write(stdin, on_write())
-			loop.shutdown(stdin)
-		end
-	end
+local function right_pad(str, width)
+	return str .. string.rep(' ', width - #str)
 end
 
 return {
@@ -128,5 +99,5 @@ return {
 	truncate_string = truncate_string;
 	termcode = termcode;
 	redraw = redraw;
-	run_script = create_script_runner();
+	right_pad = right_pad;
 }

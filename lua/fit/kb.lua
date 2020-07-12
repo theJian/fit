@@ -1,4 +1,4 @@
-local util = require('fit.util')
+local util = require 'fit.util'
 local map = util.map
 local termcode = util.termcode
 
