@@ -111,17 +111,10 @@ function win:repaint()
 	local inner_width = self.width - 2 -- subtract left and right border
 
 	local input_line = state.input .. ' ' -- Adding a space at the end to allow the cursor to move just past the end of the line
-	local option_lines = map(
-		state.options,
-		function(line, index)
-			local indent_prefix = (index == state.focus and '>' or ' ')
-			return indent_prefix .. line
-		end
-	)
 
 	local lines = {'╭' .. string.rep('─', inner_width) .. '╮'}
 	vim.list_extend(lines,
-		map({input_line, unpack(option_lines)}, function(line)
+		map({input_line, unpack(state.options)}, function(line)
 			local display_line = right_pad(
 				truncate_string(line, inner_width, true),
 				inner_width
@@ -139,7 +132,7 @@ function win:repaint()
 
 	local border_top = 1
 	local border_left = #'│'
-	local cursor_pos = state.cursor + border_left
+	local cursor_pos = state.cursor - math.max(#input_line - inner_width, 0) + border_left
 	vim.api.nvim_buf_clear_namespace(self.buf, -1, 0, -1)
 	vim.api.nvim_buf_add_highlight(self.buf, 0, 'FitCursor', border_top, cursor_pos - 1, cursor_pos)
 	if state.focus > 0 then

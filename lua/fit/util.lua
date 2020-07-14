@@ -64,13 +64,13 @@ local function truncate_string(string, width, hide_left)
 		if hide_left then
 			left = 2 - width
 			right = -1
-			prefix = '‥'
+			prefix = '..'
 			subfix = ''
 		else
 			left = 1
 			right = width - 2
 			prefix = ''
-			subfix = '‥'
+			subfix = '..'
 		end
 		return prefix .. string.sub(string, left, right) .. subfix
 	end
