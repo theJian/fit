@@ -125,14 +125,6 @@ local function make_command(command_string, placeholders)
 	return command
 end
 
-local function render_options(buf, width, height, lines)
-	-- local border = string.rep('─', width - 2)
-	-- local top = '┌' .. border .. '┐'
-	-- local bottom = '└' .. border .. '┘'
-	vim.api.nvim_buf_set_lines(buf, 1, -1, 0, lines)
-	redraw()
-end
-
 local function show_win(on_change, on_accept)
 	input:clear()
 	options:clear()
