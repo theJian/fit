@@ -43,7 +43,7 @@ end
 
 local function create_win_container(buf, config)
 	local row, col, width, height = get_win_bounding(config.width)
-	return vim.api.nvim_open_win(buf, true, {
+	local win = vim.api.nvim_open_win(buf, true, {
 		relative = 'editor',
 		style = 'minimal',
 		row = row,
@@ -51,6 +51,8 @@ local function create_win_container(buf, config)
 		width = width,
 		height = height,
 	})
+	vim.api.nvim_win_set_option(win, 'winhl', 'Normal:FitNormal')
+	return win
 end
 
 local win = {}
