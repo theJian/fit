@@ -115,7 +115,7 @@ function win:repaint()
 	local increment = math.min(state.cursor - self.input_scroll_left - 1, 0) +
 							math.max(state.cursor - self.input_scroll_left - inner_width, 0)
 	self.input_scroll_left = self.input_scroll_left + increment
-	local visible_input_line = string.sub(input_line, self.input_scroll_left + 1, self.input_scroll_left + inner_width)
+	local visible_input_line = vim.fn.strcharpart(input_line, self.input_scroll_left, inner_width)
 	local border_v = '│'
 
 	local lines = {'╭' .. string.rep('─', inner_width) .. '╮'}
@@ -141,8 +141,7 @@ function win:repaint()
 
 	local border_top = 1
 	local border_v_width = #border_v
-	local cursor_pos = state.cursor - self.input_scroll_left + border_v_width
-	print(cursor_pos)
+	local cursor_pos = #(vim.fn.strcharpart(input_line, self.input_scroll_left, state.cursor - self.input_scroll_left)) + border_v_width
 	vim.api.nvim_buf_clear_namespace(self.buf, -1, 0, -1)
 	vim.api.nvim_buf_add_highlight(self.buf, 0, 'FitCursor', border_top, cursor_pos - 1, cursor_pos)
 	if state.focus > 0 then

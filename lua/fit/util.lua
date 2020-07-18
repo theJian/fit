@@ -59,7 +59,7 @@ local function echoerr(msg)
 end
 
 local function truncate_string(string, width, hide_left)
-	if #string > width then
+	if vim.fn.strdisplaywidth(string) > width then
 		local left, right, prefix, subfix
 		if hide_left then
 			left = 2 - width
@@ -87,7 +87,7 @@ local function redraw()
 end
 
 local function right_pad(str, width)
-	return str .. string.rep(' ', width - #str)
+	return str .. string.rep(' ', width - vim.fn.strdisplaywidth(str))
 end
 
 return {
