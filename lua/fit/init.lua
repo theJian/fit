@@ -201,7 +201,8 @@ end
 
 -- Methods
 M = {
-	kb = kb
+	kb = kb;
+	actions = actions;
 }
 
 function M.find(script, accept_command)
