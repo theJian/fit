@@ -1,3 +1,8 @@
+-- TODO:
+-- file picker [x]
+-- buffer picker [x]
+-- symbol pikcker [] (with treesitter, only search in current buffer
+
 local worker = require 'fit.worker'
 local kb = require 'fit.kb'
 local win = require 'fit.win'
